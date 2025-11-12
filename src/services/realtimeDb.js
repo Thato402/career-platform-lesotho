@@ -616,7 +616,7 @@ const getMockInstitutions = () => {
       description: 'Leading institution for nursing and midwifery education, producing healthcare professionals to serve in hospitals and clinics across Lesotho.',
       coursesCount: 8,
       studentsCount: 400,
-      contactEmail: 'principal@nursingschool.ls',
+      contactEmail: 'principal@nursingschool.ls', 
       phone: '+266 2231 2678',
       website: 'https://www.lesothonursing.edu.ls',
       established: '1963',
