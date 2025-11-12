@@ -42,25 +42,25 @@ const About = () => {
       name: 'Dr. Sarah Johnson',
       role: 'CEO & Founder',
       bio: 'Former university dean with 15+ years in education technology',
-      image: '👩‍💼',
+      
     },
     {
       name: 'Michael Chen',
       role: 'CTO',
       bio: 'Tech entrepreneur specializing in EdTech solutions',
-      image: '👨‍💻',
+      
     },
     {
       name: 'Emily Rodriguez',
       role: 'Head of Partnerships',
       bio: 'Expert in building educational and corporate relationships',
-      image: '👩‍💼',
+      
     },
     {
       name: 'David Thompson',
       role: 'Product Director',
       bio: 'Passionate about creating user-centered career solutions',
-      image: '👨‍💼',
+      
     },
   ];
 
@@ -70,21 +70,21 @@ const About = () => {
         'This platform transformed how we connect with students. Our enrollment quality has improved significantly.',
       author: 'Prof. James Wilson',
       role: 'Director of Admissions, University of Technology',
-      avatar: '👨‍🏫',
+      
     },
     {
       quote:
         'As a recent graduate, I found my dream job through CareerPath. The matching system is incredible!',
       author: 'Lisa Zhang',
       role: 'Software Developer at TechCorp',
-      avatar: '👩‍🎓',
+      
     },
     {
       quote:
         "We've hired exceptional talent through this platform. The candidate quality is consistently outstanding.",
       author: 'Robert Martinez',
       role: 'HR Director, Innovation Labs',
-      avatar: '👨‍💼',
+      
     },
   ];
 
