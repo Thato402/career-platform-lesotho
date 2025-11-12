@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { getStudentApplications, createApplication, deleteApplication } from '../services/realtimeDb';
 import { getCourses, getInstitutions } from '../services/realtimeDb';
+import './Applications.css';
 
 const Applications = ({ user, userProfile }) => {
   const [applications, setApplications] = useState([]);
@@ -13,6 +14,51 @@ const Applications = ({ user, userProfile }) => {
   const [filteredCourses, setFilteredCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    personalInfo: {
+      fullName: '',
+      dateOfBirth: '',
+      gender: '',
+      nationalId: '',
+      phoneNumber: '',
+      address: ''
+    },
+    academicBackground: {
+      secondarySchool: '',
+      completionYear: new Date().getFullYear(),
+      lgcseResults: [],
+      sittingNumber: '',
+      examYear: new Date().getFullYear()
+    },
+    guardianInfo: {
+      guardianName: '',
+      guardianPhone: '',
+      guardianEmail: '',
+      relationship: '',
+      occupation: ''
+    },
+    supportingDocuments: {
+      idCopy: false,
+      birthCertificate: false,
+      lgcseResults: false,
+      passportPhotos: false,
+      recommendationLetter: false
+    },
+    declaration: false
+  });
+
+  // LGCSE Subjects common in Lesotho
+  const lgceseSubjects = [
+    'English Language', 'Sesotho', 'Mathematics', 'Additional Mathematics',
+    'Physical Science', 'Biology', 'Chemistry', 'Physics',
+    'Geography', 'History', 'Development Studies', 'Accounting',
+    'Commerce', 'Computer Studies', 'Agriculture', 'Food and Nutrition',
+    'Fashion and Fabrics', 'Art and Design', 'Music', 'Religious Studies'
+  ];
+
+  const grades = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'U'];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -27,6 +73,19 @@ const Applications = ({ user, userProfile }) => {
           setCourses(coursesData);
           setInstitutions(institutionsData);
           setFilteredCourses(coursesData);
+          
+          // Pre-fill form with user data
+          if (userProfile) {
+            setFormData(prev => ({
+              ...prev,
+              personalInfo: {
+                ...prev.personalInfo,
+                fullName: userProfile.name || '',
+                phoneNumber: userProfile.phone || '',
+                email: user.email || ''
+              }
+            }));
+          }
         } catch (error) {
           console.error('Error fetching data:', error);
         } finally {
@@ -44,15 +103,89 @@ const Applications = ({ user, userProfile }) => {
     if (selectedInstitution) {
       const filtered = courses.filter(course => course.institutionId === selectedInstitution);
       setFilteredCourses(filtered);
-      setSelectedCourse(''); // Reset course selection when institution changes
+      setSelectedCourse('');
     } else {
       setFilteredCourses(courses);
     }
   }, [selectedInstitution, courses]);
 
+  const handleInputChange = (section, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleLgceseResultChange = (index, field, value) => {
+    const updatedResults = [...formData.academicBackground.lgcseResults];
+    updatedResults[index] = {
+      ...updatedResults[index],
+      [field]: value
+    };
+    handleInputChange('academicBackground', 'lgcseResults', updatedResults);
+  };
+
+  const addLgceseSubject = () => {
+    if (formData.academicBackground.lgcseResults.length < 8) {
+      handleInputChange('academicBackground', 'lgcseResults', [
+        ...formData.academicBackground.lgcseResults,
+        { subject: '', grade: '' }
+      ]);
+    }
+  };
+
+  const removeLgceseSubject = (index) => {
+    const updatedResults = formData.academicBackground.lgcseResults.filter((_, i) => i !== index);
+    handleInputChange('academicBackground', 'lgcseResults', updatedResults);
+  };
+
+  const validateForm = () => {
+    const { personalInfo, academicBackground, guardianInfo, declaration } = formData;
+    
+    if (!personalInfo.fullName || !personalInfo.dateOfBirth || !personalInfo.gender || 
+        !personalInfo.nationalId || !personalInfo.phoneNumber || !personalInfo.address) {
+      alert('Please fill in all personal information fields');
+      return false;
+    }
+
+    if (!academicBackground.secondarySchool || !academicBackground.sittingNumber || 
+        academicBackground.lgcseResults.length === 0) {
+      alert('Please provide your academic background including LGCSE results');
+      return false;
+    }
+
+    // Validate LGCSE results
+    for (const result of academicBackground.lgcseResults) {
+      if (!result.subject || !result.grade) {
+        alert('Please complete all LGCSE subject entries');
+        return false;
+      }
+    }
+
+    if (!guardianInfo.guardianName || !guardianInfo.guardianPhone || !guardianInfo.relationship) {
+      alert('Please provide guardian information');
+      return false;
+    }
+
+    if (!declaration) {
+      alert('Please accept the declaration to proceed');
+      return false;
+    }
+
+    if (!selectedCourse) {
+      alert('Please select a course to apply for');
+      return false;
+    }
+
+    return true;
+  };
+
   const handleApplicationSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedCourse) return;
+    if (!validateForm()) return;
 
     setSubmitting(true);
     try {
@@ -68,17 +201,22 @@ const Applications = ({ user, userProfile }) => {
         throw new Error(`You can only apply to maximum 2 courses at ${institution.name}`);
       }
 
-      await createApplication({
+      const applicationData = {
         studentId: user.uid,
-        studentName: userProfile?.name || user.email,
+        studentName: formData.personalInfo.fullName,
         studentEmail: user.email,
         courseId: selectedCourse,
         courseName: course.name,
         institutionId: course.institutionId,
         institutionName: course.institutionName,
         status: 'pending',
-        appliedDate: new Date().toISOString()
-      });
+        appliedDate: new Date().toISOString(),
+        formData: formData, // Include all form data
+        applicationType: 'undergraduate',
+        applicationYear: new Date().getFullYear()
+      };
+
+      await createApplication(applicationData);
 
       // Refresh applications
       const updatedApps = await getStudentApplications(user.uid);
@@ -86,12 +224,48 @@ const Applications = ({ user, userProfile }) => {
       setShowApplicationForm(false);
       setSelectedCourse('');
       setSelectedInstitution('');
-      alert('Application submitted successfully!');
+      resetForm();
+      alert('Application submitted successfully! The institution will contact you for next steps.');
     } catch (error) {
       alert(error.message);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      personalInfo: {
+        fullName: userProfile?.name || '',
+        dateOfBirth: '',
+        gender: '',
+        nationalId: '',
+        phoneNumber: userProfile?.phone || '',
+        address: ''
+      },
+      academicBackground: {
+        secondarySchool: '',
+        completionYear: new Date().getFullYear(),
+        lgcseResults: [],
+        sittingNumber: '',
+        examYear: new Date().getFullYear()
+      },
+      guardianInfo: {
+        guardianName: '',
+        guardianPhone: '',
+        guardianEmail: '',
+        relationship: '',
+        occupation: ''
+      },
+      supportingDocuments: {
+        idCopy: false,
+        birthCertificate: false,
+        lgcseResults: false,
+        passportPhotos: false,
+        recommendationLetter: false
+      },
+      declaration: false
+    });
   };
 
   const handleDeleteApplication = async (applicationId) => {
@@ -157,8 +331,8 @@ const Applications = ({ user, userProfile }) => {
     <div className="dashboard">
       <div className="container">
         <div className="dashboard-header">
-          <h1>My Applications</h1>
-          <p>Track your course applications and admission status</p>
+          <h1>Course Applications</h1>
+          <p>Apply for tertiary education courses in Lesotho institutions</p>
         </div>
 
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
@@ -166,107 +340,417 @@ const Applications = ({ user, userProfile }) => {
             className="btn btn-primary"
             onClick={() => setShowApplicationForm(true)}
           >
-            <i className="fas fa-plus"></i> New Application
+            <i className="fas fa-plus"></i> New Course Application
           </button>
         </div>
 
         {showApplicationForm && (
-          <div className="form-container" style={{ marginBottom: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3>Apply for a Course</h3>
+          <div className="application-form-container">
+            <div className="form-header">
+              <h2>Course Application Form</h2>
+              <p>Complete this form to apply for tertiary education in Lesotho</p>
               <button 
-                className="btn btn-outline" 
+                className="btn btn-outline close-btn" 
                 onClick={() => {
                   setShowApplicationForm(false);
-                  setSelectedCourse('');
-                  setSelectedInstitution('');
+                  resetForm();
                 }}
-                style={{ border: 'none', fontSize: '1.2rem' }}
               >
                 <i className="fas fa-times"></i>
               </button>
             </div>
             
-            <div style={{ marginBottom: '20px', padding: '15px', background: 'rgba(76, 201, 240, 0.1)', borderRadius: 'var(--radius)' }}>
-              <p><strong>Application Rules:</strong></p>
-              <ul style={{ margin: '10px 0', paddingLeft: '20px' }}>
-                <li>Maximum 2 applications per institution</li>
-                <li>You can apply to multiple institutions</li>
-                <li>Applications can be withdrawn anytime before review</li>
-              </ul>
-            </div>
+            <form onSubmit={handleApplicationSubmit} className="application-form">
+              {/* Course Selection Section */}
+              <div className="form-section">
+                <h3>1. Course Selection</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Select Institution *</label>
+                    <select
+                      value={selectedInstitution}
+                      onChange={(e) => setSelectedInstitution(e.target.value)}
+                      required
+                      disabled={submitting}
+                    >
+                      <option value="">Choose an institution...</option>
+                      {institutions.map(institution => (
+                        <option key={institution.id} value={institution.id}>
+                          {institution.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <form onSubmit={handleApplicationSubmit}>
-              <div className="form-group">
-                <label>Select Institution</label>
-                <select
-                  value={selectedInstitution}
-                  onChange={(e) => setSelectedInstitution(e.target.value)}
-                  required
-                  disabled={submitting}
-                >
-                  <option value="">Choose an institution first...</option>
-                  {institutions.map(institution => (
-                    <option key={institution.id} value={institution.id}>
-                      {institution.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div className="form-group">
+                    <label>Select Course *</label>
+                    <select
+                      value={selectedCourse}
+                      onChange={(e) => setSelectedCourse(e.target.value)}
+                      required
+                      disabled={submitting || !selectedInstitution}
+                    >
+                      <option value="">Choose a course...</option>
+                      {filteredCourses.map(course => (
+                        <option key={course.id} value={course.id}>
+                          {course.name} - {course.duration} - M{course.fee}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-              <div className="form-group">
-                <label>Select Course</label>
-                <select
-                  value={selectedCourse}
-                  onChange={(e) => setSelectedCourse(e.target.value)}
-                  required
-                  disabled={submitting || !selectedInstitution}
-                >
-                  <option value="">Choose a course...</option>
-                  {filteredCourses.map(course => (
-                    <option key={course.id} value={course.id}>
-                      {course.name} - {course.duration} - M{course.fee}
-                    </option>
-                  ))}
-                </select>
-                {!selectedInstitution && (
-                  <small style={{ color: 'var(--gray)' }}>Please select an institution first</small>
+                {selectedCourse && (
+                  <div className="course-details">
+                    <h4>Selected Course Details:</h4>
+                    <div className="course-info">
+                      <p><strong>Course:</strong> {filteredCourses.find(c => c.id === selectedCourse)?.name}</p>
+                      <p><strong>Duration:</strong> {filteredCourses.find(c => c.id === selectedCourse)?.duration}</p>
+                      <p><strong>Tuition Fee:</strong> M{filteredCourses.find(c => c.id === selectedCourse)?.fee} per year</p>
+                      <p><strong>Requirements:</strong> {filteredCourses.find(c => c.id === selectedCourse)?.requirements?.join(', ')}</p>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {selectedCourse && (
-                <div style={{ 
-                  padding: '15px', 
-                  background: 'rgba(67, 97, 238, 0.05)', 
-                  borderRadius: 'var(--radius)',
-                  marginBottom: '20px'
-                }}>
-                  <h4>Course Details:</h4>
-                  {filteredCourses.find(c => c.id === selectedCourse)?.description && (
-                    <p><strong>Description:</strong> {filteredCourses.find(c => c.id === selectedCourse).description}</p>
-                  )}
-                  {filteredCourses.find(c => c.id === selectedCourse)?.requirements && (
-                    <div>
-                      <strong>Requirements:</strong>
-                      <ul>
-                        {filteredCourses.find(c => c.id === selectedCourse).requirements.map((req, idx) => (
-                          <li key={idx}>{req}</li>
+              {/* Personal Information Section */}
+              <div className="form-section">
+                <h3>2. Personal Information</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Full Name *</label>
+                    <input
+                      type="text"
+                      value={formData.personalInfo.fullName}
+                      onChange={(e) => handleInputChange('personalInfo', 'fullName', e.target.value)}
+                      required
+                      placeholder="As it appears on your ID"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Date of Birth *</label>
+                    <input
+                      type="date"
+                      value={formData.personalInfo.dateOfBirth}
+                      onChange={(e) => handleInputChange('personalInfo', 'dateOfBirth', e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Gender *</label>
+                    <select
+                      value={formData.personalInfo.gender}
+                      onChange={(e) => handleInputChange('personalInfo', 'gender', e.target.value)}
+                      required
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>National ID Number *</label>
+                    <input
+                      type="text"
+                      value={formData.personalInfo.nationalId}
+                      onChange={(e) => handleInputChange('personalInfo', 'nationalId', e.target.value)}
+                      required
+                      placeholder="e.g., 123456789"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Phone Number *</label>
+                    <input
+                      type="tel"
+                      value={formData.personalInfo.phoneNumber}
+                      onChange={(e) => handleInputChange('personalInfo', 'phoneNumber', e.target.value)}
+                      required
+                      placeholder="+266 1234 5678"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Email Address</label>
+                    <input
+                      type="email"
+                      value={user.email}
+                      disabled
+                      className="disabled-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Residential Address *</label>
+                  <textarea
+                    value={formData.personalInfo.address}
+                    onChange={(e) => handleInputChange('personalInfo', 'address', e.target.value)}
+                    required
+                    placeholder="Full physical address including village/town"
+                    rows="3"
+                  />
+                </div>
+              </div>
+
+              {/* Academic Background Section */}
+              <div className="form-section">
+                <h3>3. Academic Background</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Secondary School *</label>
+                    <input
+                      type="text"
+                      value={formData.academicBackground.secondarySchool}
+                      onChange={(e) => handleInputChange('academicBackground', 'secondarySchool', e.target.value)}
+                      required
+                      placeholder="Name of your high school"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Year of Completion *</label>
+                    <input
+                      type="number"
+                      value={formData.academicBackground.completionYear}
+                      onChange={(e) => handleInputChange('academicBackground', 'completionYear', e.target.value)}
+                      required
+                      min="2010"
+                      max={new Date().getFullYear()}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>LGCSE Sitting Number *</label>
+                    <input
+                      type="text"
+                      value={formData.academicBackground.sittingNumber}
+                      onChange={(e) => handleInputChange('academicBackground', 'sittingNumber', e.target.value)}
+                      required
+                      placeholder="Examination sitting number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Examination Year *</label>
+                    <input
+                      type="number"
+                      value={formData.academicBackground.examYear}
+                      onChange={(e) => handleInputChange('academicBackground', 'examYear', e.target.value)}
+                      required
+                      min="2010"
+                      max={new Date().getFullYear()}
+                    />
+                  </div>
+                </div>
+
+                <div className="lgcse-results-section">
+                  <h4>LGCSE Results *</h4>
+                  <p className="form-help">Add your LGCSE subjects and grades (minimum 5 subjects required)</p>
+                  
+                  {formData.academicBackground.lgcseResults.map((result, index) => (
+                    <div key={index} className="lgcse-subject-row">
+                      <select
+                        value={result.subject}
+                        onChange={(e) => handleLgceseResultChange(index, 'subject', e.target.value)}
+                        required
+                      >
+                        <option value="">Select Subject</option>
+                        {lgceseSubjects.map(subject => (
+                          <option key={subject} value={subject}>{subject}</option>
                         ))}
-                      </ul>
+                      </select>
+                      
+                      <select
+                        value={result.grade}
+                        onChange={(e) => handleLgceseResultChange(index, 'grade', e.target.value)}
+                        required
+                      >
+                        <option value="">Select Grade</option>
+                        {grades.map(grade => (
+                          <option key={grade} value={grade}>{grade}</option>
+                        ))}
+                      </select>
+                      
+                      <button
+                        type="button"
+                        className="btn btn-danger remove-subject-btn"
+                        onClick={() => removeLgceseSubject(index)}
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
                     </div>
+                  ))}
+                  
+                  {formData.academicBackground.lgcseResults.length < 8 && (
+                    <button
+                      type="button"
+                      className="btn btn-outline add-subject-btn"
+                      onClick={addLgceseSubject}
+                    >
+                      <i className="fas fa-plus"></i> Add Subject
+                    </button>
                   )}
                 </div>
-              )}
+              </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
+              {/* Guardian Information Section */}
+              <div className="form-section">
+                <h3>4. Guardian/Parent Information</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Guardian's Full Name *</label>
+                    <input
+                      type="text"
+                      value={formData.guardianInfo.guardianName}
+                      onChange={(e) => handleInputChange('guardianInfo', 'guardianName', e.target.value)}
+                      required
+                      placeholder="Guardian or parent's full name"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Relationship *</label>
+                    <select
+                      value={formData.guardianInfo.relationship}
+                      onChange={(e) => handleInputChange('guardianInfo', 'relationship', e.target.value)}
+                      required
+                    >
+                      <option value="">Select Relationship</option>
+                      <option value="father">Father</option>
+                      <option value="mother">Mother</option>
+                      <option value="guardian">Guardian</option>
+                      <option value="sibling">Sibling</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Guardian's Phone Number *</label>
+                    <input
+                      type="tel"
+                      value={formData.guardianInfo.guardianPhone}
+                      onChange={(e) => handleInputChange('guardianInfo', 'guardianPhone', e.target.value)}
+                      required
+                      placeholder="+266 1234 5678"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Guardian's Email</label>
+                    <input
+                      type="email"
+                      value={formData.guardianInfo.guardianEmail}
+                      onChange={(e) => handleInputChange('guardianInfo', 'guardianEmail', e.target.value)}
+                      placeholder="guardian@email.com"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Guardian's Occupation</label>
+                  <input
+                    type="text"
+                    value={formData.guardianInfo.occupation}
+                    onChange={(e) => handleInputChange('guardianInfo', 'occupation', e.target.value)}
+                    placeholder="Occupation or profession"
+                  />
+                </div>
+              </div>
+
+              {/* Supporting Documents Section */}
+              <div className="form-section">
+                <h3>5. Supporting Documents Checklist</h3>
+                <p className="form-help">Please ensure you have the following documents ready for submission:</p>
+                
+                <div className="documents-checklist">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={formData.supportingDocuments.idCopy}
+                      onChange={(e) => handleInputChange('supportingDocuments', 'idCopy', e.target.checked)}
+                    />
+                    <span>Certified copy of National ID/Birth Certificate</span>
+                  </label>
+                  
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={formData.supportingDocuments.lgcseResults}
+                      onChange={(e) => handleInputChange('supportingDocuments', 'lgcseResults', e.target.checked)}
+                    />
+                    <span>Certified copy of LGCSE Results</span>
+                  </label>
+                  
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={formData.supportingDocuments.passportPhotos}
+                      onChange={(e) => handleInputChange('supportingDocuments', 'passportPhotos', e.target.checked)}
+                    />
+                    <span>Two recent passport-sized photographs</span>
+                  </label>
+                  
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={formData.supportingDocuments.recommendationLetter}
+                      onChange={(e) => handleInputChange('supportingDocuments', 'recommendationLetter', e.target.checked)}
+                    />
+                    <span>School recommendation letter (if available)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Declaration Section */}
+              <div className="form-section">
+                <h3>6. Declaration</h3>
+                <div className="declaration-box">
+                  <p>
+                    I hereby declare that the information provided in this application is true and correct to the best of my knowledge. 
+                    I understand that any false information may lead to the rejection of my application or termination of admission. 
+                    I agree to abide by the rules and regulations of the institution if admitted.
+                  </p>
+                  
+                  <label className="checkbox-label declaration-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={formData.declaration}
+                      onChange={(e) => handleInputChange('declaration', 'declaration', e.target.checked)}
+                      required
+                    />
+                    <span>I accept the above declaration and terms *</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Application Rules */}
+              <div className="application-rules">
+                <h4>Application Rules & Information:</h4>
+                <ul>
+                  <li>Maximum 2 applications per institution allowed</li>
+                  <li>Applications will be processed within 2-4 weeks</li>
+                  <li>You will be contacted for any additional requirements</li>
+                  <li>Keep your documents ready for verification</li>
+                  <li>Application fee (if any) will be communicated by the institution</li>
+                </ul>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="form-actions">
                 <button 
                   type="submit" 
-                  className="btn btn-primary"
+                  className="btn btn-primary submit-btn"
                   disabled={submitting || !selectedCourse}
                 >
                   {submitting ? (
                     <>
-                      <i className="fas fa-spinner fa-spin"></i> Submitting...
+                      <i className="fas fa-spinner fa-spin"></i> Submitting Application...
                     </>
                   ) : (
                     <>
@@ -279,18 +763,18 @@ const Applications = ({ user, userProfile }) => {
                   className="btn btn-outline"
                   onClick={() => {
                     setShowApplicationForm(false);
-                    setSelectedCourse('');
-                    setSelectedInstitution('');
+                    resetForm();
                   }}
                   disabled={submitting}
                 >
-                  Cancel
+                  Cancel Application
                 </button>
               </div>
             </form>
           </div>
         )}
 
+        {/* Existing applications display code remains the same */}
         {loading ? (
           <div style={{ textAlign: 'center' }}>
             <div className="spinner"></div>
