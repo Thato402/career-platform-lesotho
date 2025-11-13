@@ -40,7 +40,7 @@ const Footer = () => {
             <h3>Contact Info</h3>
             <ul className="footer-links">
               <li><i className="fas fa-map-marker-alt"></i> Limkokwing University, Maseru</li>
-              <li><i className="fas fa-phone"></i> +266 2231 2135</li>
+              <li><i className="fas fa-phone"></i> +266 57013653</li>
               <li><i className="fas fa-envelope"></i> info@careerpath.ls</li>
               <li><i className="fas fa-clock"></i> Mon - Fri: 8:00 AM - 5:00 PM</li>
             </ul>
