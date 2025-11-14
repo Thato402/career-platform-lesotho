@@ -24,16 +24,13 @@ const AdminDashboard = ({ user, userProfile }) => {
       name: 'National University of Lesotho',
       location: 'Roma, Lesotho',
       description: 'Premier higher education institution...',
-      coursesCount: 45,
-      studentsCount: 8500,
-      successRate: 92
     }
   ];
 
   const mockApplications = [
     {
       id: 1,
-      studentName: 'John Molapo',
+      studentName: 'Tumelo Molapo',
       courseName: 'Computer Science',
       status: 'pending',
       applicationDate: '2024-03-15'
@@ -43,8 +40,8 @@ const AdminDashboard = ({ user, userProfile }) => {
   const mockUsers = [
     { 
       id: 1, 
-      name: 'John Student', 
-      email: 'john@student.ls', 
+      name: 'Pule Student', 
+      email: 'pule@student.ls', 
       role: 'student', 
       status: 'active',
       joinDate: '2024-01-15',
