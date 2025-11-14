@@ -18,19 +18,19 @@ const Demo = () => {
             <p>Join thousands of users already benefiting from our integrated approach</p>
             <div className="demo-stats">
               <div className="stat">
-                <div className="stat-number">5,000+</div>
+                <div className="stat-number"></div>
                 <div className="stat-label">Students Registered</div>
               </div>
               <div className="stat">
-                <div className="stat-number">50+</div>
+                <div className="stat-number"></div>
                 <div className="stat-label">Institutions</div>
               </div>
               <div className="stat">
-                <div className="stat-number">200+</div>
+                <div className="stat-number"></div>
                 <div className="stat-label">Partner Companies</div>
               </div>
               <div className="stat">
-                <div className="stat-number">1,500+</div>
+                <div className="stat-number"></div>
                 <div className="stat-label">Successful Placements</div>
               </div>
             </div>
