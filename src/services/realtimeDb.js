@@ -150,6 +150,34 @@ export const createApplication = async (applicationData) => {
   }
 };
 
+// Get applications for a specific institution
+export const getInstitutionApplications = async (institutionId) => {
+  try {
+    console.log('Fetching applications for institution:', institutionId);
+    const snapshot = await get(ref(db, 'applications'));
+    if (snapshot.exists()) {
+      const applications = snapshot.val();
+      const applicationsArray = Object.keys(applications).map(key => ({
+        id: key,
+        ...applications[key]
+      }));
+      
+      // Filter by institution ID and sort by applied date
+      const institutionApplications = applicationsArray
+        .filter(app => app.institutionId === institutionId)
+        .sort((a, b) => new Date(b.appliedAt) - new Date(a.appliedAt));
+      
+      console.log('Institution applications found:', institutionApplications.length);
+      return institutionApplications;
+    }
+    console.log('No applications found for institution:', institutionId);
+    return [];
+  } catch (error) {
+    console.error('Error getting institution applications:', error);
+    return [];
+  }
+};
+
 // Application Management
 export const updateApplicationStatus = async (applicationId, status) => {
   try {
@@ -516,6 +544,7 @@ const getMockJobs = () => {
     }
   ];
 };
+
 const getMockInstitutions = () => {
   return [
     {
@@ -1204,6 +1233,7 @@ const getMockCourses = () => {
     }
   ];
 };
+
 // Initialize sample data
 export const initializeSampleData = async () => {
   try {
