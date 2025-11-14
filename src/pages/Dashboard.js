@@ -1,8 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { 
+  getStudentApplications, 
+  getInstitutionApplications, 
+  getCourses,
+  getCompanies,
+  getJobs,
+  getInstitutions,
+  getUserProfile
+} from '../services/realtimeDb';
 import './Dashboard.css';
 
-// Helper function for stat icons (moved outside component)
+// Helper function for stat icons
 const getStatIcon = (statKey) => {
   const iconMap = {
     applications: 'file-alt',
@@ -33,7 +42,9 @@ const getStatIcon = (statKey) => {
     systemHealth: 'heartbeat',
     pendingApprovals: 'clock',
     upcomingInterviews: 'calendar-alt',
-    recommendedCourses: 'book'
+    recommendedCourses: 'book',
+    qualifiedCourses: 'graduation-cap',
+    transcriptStatus: 'file-contract'
   };
   
   return iconMap[statKey] || 'chart-line';
@@ -43,83 +54,290 @@ const Dashboard = ({ user }) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({});
   const [recentActivity, setRecentActivity] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Move useEffect to the top level - never call hooks conditionally
   useEffect(() => {
-    if (!user) return; // Early return inside useEffect is fine
+    if (!user) return;
 
-    // Simulate fetching dashboard data
     const fetchDashboardData = async () => {
-      const role = user.role || 'student';
-      
-      // Mock stats based on role
-      const mockStats = {
-        student: {
-          applications: 12,
-          messages: 8,
-          pending: 3,
-          profileComplete: 85,
-          upcomingInterviews: 2,
-          recommendedCourses: 15
-        },
-        institute: {
-          totalCourses: 45,
-          newApplications: 23,
-          pendingReviews: 12,
-          enrollmentRate: 78,
-          activeStudents: 1250,
-          revenue: '₹4.2L'
-        },
-        company: {
-          activeJobs: 8,
-          newApplicants: 34,
-          interviews: 15,
-          hireRate: '22%',
-          openPositions: 12,
-          totalHires: 45
-        },
-        admin: {
-          totalUsers: 12500,
-          activeInstitutions: 245,
-          companies: 567,
-          systemHealth: '98%',
-          pendingApprovals: 23,
-          revenue: '₹25.4L'
+      try {
+        setLoading(true);
+        const role = user.role || 'student';
+        
+        let dashboardStats = {};
+        let activityData = [];
+
+        switch (role) {
+          case 'student':
+            const studentData = await fetchStudentData(user.uid);
+            dashboardStats = studentData.stats;
+            activityData = studentData.activity;
+            break;
+          case 'institute':
+            const instituteData = await fetchInstituteData(user.uid);
+            dashboardStats = instituteData.stats;
+            activityData = instituteData.activity;
+            break;
+          case 'company':
+            const companyData = await fetchCompanyData(user.uid);
+            dashboardStats = companyData.stats;
+            activityData = companyData.activity;
+            break;
+          case 'admin':
+            const adminData = await fetchAdminData();
+            dashboardStats = adminData.stats;
+            activityData = adminData.activity;
+            break;
+          default:
+            dashboardStats = {};
+            activityData = [];
         }
-      };
 
-      // Mock recent activity
-      const mockActivity = {
-        student: [
-          { id: 1, type: 'application', message: 'Application submitted for Computer Science', time: '2 hours ago', status: 'pending' },
-          { id: 2, type: 'message', message: 'New message from Admissions Team', time: '1 day ago', status: 'unread' },
-          { id: 3, type: 'interview', message: 'Interview scheduled for Tomorrow', time: '2 days ago', status: 'upcoming' }
-        ],
-        institute: [
-          { id: 1, type: 'application', message: '15 new applications received', time: '3 hours ago', status: 'new' },
-          { id: 2, type: 'enrollment', message: '8 students enrolled in Engineering', time: '1 day ago', status: 'completed' },
-          { id: 3, type: 'alert', message: 'Course approval pending', time: '2 days ago', status: 'warning' }
-        ],
-        company: [
-          { id: 1, type: 'application', message: '12 new applicants for Developer role', time: '4 hours ago', status: 'new' },
-          { id: 2, type: 'interview', message: 'Technical interviews scheduled', time: '1 day ago', status: 'scheduled' },
-          { id: 3, type: 'hire', message: '2 candidates accepted offers', time: '3 days ago', status: 'completed' }
-        ],
-        admin: [
-          { id: 1, type: 'user', message: '45 new user registrations', time: '5 hours ago', status: 'new' },
-          { id: 2, type: 'institution', message: '3 institutions pending verification', time: '1 day ago', status: 'pending' },
-          { id: 3, type: 'system', message: 'System backup completed', time: '2 days ago', status: 'completed' }
-        ]
-      };
-
-      setStats(mockStats[role] || {});
-      setRecentActivity(mockActivity[role] || []);
+        setStats(dashboardStats);
+        setRecentActivity(activityData);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchDashboardData();
-  }, [user]); // Add user as dependency
+  }, [user]);
 
-  // Authentication check - keep this before hooks
+  // Fetch real data for students
+  const fetchStudentData = async (userId) => {
+    try {
+      const [applications, courses, jobs, userProfile] = await Promise.all([
+        getStudentApplications(userId),
+        getCourses(),
+        getJobs(),
+        getUserProfile(userId)
+      ]);
+
+      const pendingApplications = applications.filter(app => app.status === 'pending');
+      const acceptedApplications = applications.filter(app => app.status === 'accepted');
+      
+      // Calculate profile completion percentage
+      const profileComplete = calculateProfileCompletion(userProfile);
+      
+      // Get qualified courses based on results
+      const qualifiedCourses = userProfile?.qualifications ? 
+        courses.filter(course => isCourseQualified(course, userProfile.qualifications)).length : 0;
+
+      const stats = {
+        applications: applications.length,
+        pending: pendingApplications.length,
+        accepted: acceptedApplications.length,
+        profileComplete: profileComplete,
+        qualifiedCourses: qualifiedCourses,
+        activeJobs: jobs.length,
+        transcriptStatus: userProfile?.results ? 'Completed' : 'Pending'
+      };
+
+      const activity = applications.slice(0, 5).map(app => ({
+        id: app.applicationId,
+        message: `Application for ${app.courseName} at ${app.institutionName}`,
+        status: app.status,
+        time: formatTimeAgo(new Date(app.appliedAt))
+      }));
+
+      // Add transcript status activity if available
+      if (userProfile?.results) {
+        activity.unshift({
+          id: 'transcript',
+          message: 'LGCSE results processed and qualifications calculated',
+          status: 'completed',
+          time: formatTimeAgo(new Date(userProfile.processedAt))
+        });
+      }
+
+      return { stats, activity };
+    } catch (error) {
+      console.error('Error fetching student data:', error);
+      return { stats: {}, activity: [] };
+    }
+  };
+
+  // Fetch real data for institutions
+  const fetchInstituteData = async (institutionId) => {
+    try {
+      const [applications, courses, userProfile] = await Promise.all([
+        getInstitutionApplications(institutionId),
+        getCourses(institutionId),
+        getUserProfile(institutionId)
+      ]);
+
+      const pendingApplications = applications.filter(app => app.status === 'pending');
+      const newApplications = applications.filter(app => 
+        new Date(app.appliedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      );
+
+      const totalStudents = [...new Set(applications.map(app => app.studentId))].length;
+      const enrollmentRate = applications.length > 0 ? 
+        Math.round((applications.filter(app => app.status === 'accepted').length / applications.length) * 100) : 0;
+
+      const stats = {
+        totalCourses: courses.length,
+        newApplications: newApplications.length,
+        pendingReviews: pendingApplications.length,
+        enrollmentRate: enrollmentRate,
+        activeStudents: totalStudents,
+        totalApplications: applications.length
+      };
+
+      const activity = applications.slice(0, 5).map(app => ({
+        id: app.applicationId,
+        message: `New application from ${app.studentName} for ${app.courseName}`,
+        status: app.status,
+        time: formatTimeAgo(new Date(app.appliedAt))
+      }));
+
+      return { stats, activity };
+    } catch (error) {
+      console.error('Error fetching institute data:', error);
+      return { stats: {}, activity: [] };
+    }
+  };
+
+  // Fetch real data for companies
+  const fetchCompanyData = async (companyId) => {
+    try {
+      const [jobs, companies] = await Promise.all([
+        getJobs(),
+        getCompanies()
+      ]);
+
+      const companyJobs = jobs.filter(job => job.companyId === companyId);
+      const activeJobs = companyJobs.filter(job => job.status === 'active');
+      
+      // Calculate total applicants across all jobs (this would need enhancement in real implementation)
+      const totalApplicants = companyJobs.reduce((total, job) => total + (job.applicants || 0), 0);
+
+      const stats = {
+        activeJobs: activeJobs.length,
+        totalJobs: companyJobs.length,
+        newApplicants: totalApplicants,
+        openPositions: activeJobs.length,
+        totalCompanies: companies.length,
+        hireRate: '0%' // This would need actual hire data
+      };
+
+      const activity = companyJobs.slice(0, 5).map(job => ({
+        id: job.id,
+        message: `Job posting: ${job.title}`,
+        status: job.status === 'active' ? 'active' : 'closed',
+        time: formatTimeAgo(new Date(job.postedAt))
+      }));
+
+      return { stats, activity };
+    } catch (error) {
+      console.error('Error fetching company data:', error);
+      return { stats: {}, activity: [] };
+    }
+  };
+
+  // Fetch real data for admin
+  const fetchAdminData = async () => {
+    try {
+      const [institutions, companies, jobs, courses] = await Promise.all([
+        getInstitutions(),
+        getCompanies(),
+        getJobs(),
+        getCourses()
+      ]);
+
+      const activeInstitutions = institutions.filter(inst => inst.isActive !== false);
+      const activeCompanies = companies.filter(comp => comp.isActive !== false);
+      const activeJobs = jobs.filter(job => job.status === 'active');
+
+      const stats = {
+        totalUsers: 0, // This would need user count from database
+        activeInstitutions: activeInstitutions.length,
+        companies: activeCompanies.length,
+        totalCourses: courses.length,
+        activeJobs: activeJobs.length,
+        systemHealth: '98%'
+      };
+
+      const activity = [
+        ...institutions.slice(0, 3).map(inst => ({
+          id: inst.id,
+          message: `Institution: ${inst.name} registered`,
+          status: 'completed',
+          time: formatTimeAgo(new Date(inst.createdAt))
+        })),
+        ...companies.slice(0, 2).map(comp => ({
+          id: comp.id,
+          message: `Company: ${comp.name} joined platform`,
+          status: 'completed',
+          time: formatTimeAgo(new Date(comp.createdAt))
+        }))
+      ];
+
+      return { stats, activity };
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+      return { stats: {}, activity: [] };
+    }
+  };
+
+  // Helper function to calculate profile completion percentage
+  const calculateProfileCompletion = (userProfile) => {
+    if (!userProfile) return 0;
+    
+    let completedFields = 0;
+    const totalFields = 5; // Adjust based on your required fields
+    
+    if (userProfile.name) completedFields++;
+    if (userProfile.email) completedFields++;
+    if (userProfile.results) completedFields++;
+    if (userProfile.qualifications) completedFields++;
+    if (userProfile.applications && userProfile.applications.length > 0) completedFields++;
+    
+    return Math.round((completedFields / totalFields) * 100);
+  };
+
+  // Helper function to check if student qualifies for a course
+  const isCourseQualified = (course, qualifications) => {
+    if (!course.requirements || !qualifications) return true;
+    
+    const req = course.requirements;
+    
+    // Check minimum points
+    if (req.minPoints && qualifications.totalPoints < req.minPoints) {
+      return false;
+    }
+    
+    // Check subject requirements
+    if (req.subjects) {
+      if (req.subjects.mathematics && !['A', 'B', 'C'].includes(qualifications.subjectGrades?.mathematics)) {
+        return false;
+      }
+      if (req.subjects.english && !['A', 'B', 'C'].includes(qualifications.subjectGrades?.english)) {
+        return false;
+      }
+      if (req.subjects.science && !['A', 'B', 'C'].includes(qualifications.subjectGrades?.science)) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  // Helper function to format time ago
+  const formatTimeAgo = (date) => {
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+    
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  // Authentication check
   if (!user) {
     return <Navigate to="/login" replace />;
   }
@@ -138,7 +356,7 @@ const Dashboard = ({ user }) => {
               title: 'Browse Courses', 
               description: 'Discover and apply to courses from top institutions', 
               link: '/courses',
-              stats: `${stats.recommendedCourses || 0} recommended`,
+              stats: `${stats.qualifiedCourses || 0} qualified`,
               color: 'primary'
             },
             { 
@@ -146,15 +364,15 @@ const Dashboard = ({ user }) => {
               title: 'My Applications', 
               description: 'Track your application status and updates', 
               link: '/applications',
-              stats: `${stats.applications || 0} active`,
+              stats: `${stats.applications || 0} total`,
               color: 'info'
             },
             { 
-              icon: 'fas fa-graduation-cap', 
+              icon: 'fas fa-file-contract', 
               title: 'Academic Profile', 
               description: 'Manage your transcripts and credentials', 
-              link: '/profile',
-              stats: `${stats.profileComplete || 0}% complete`,
+              link: '/transcripts',
+              stats: stats.transcriptStatus || 'Not Started',
               color: 'success'
             },
             { 
@@ -162,7 +380,7 @@ const Dashboard = ({ user }) => {
               title: 'Career Opportunities', 
               description: 'Find internships and job placements', 
               link: '/jobs',
-              stats: `${stats.upcomingInterviews || 0} interviews`,
+              stats: `${stats.activeJobs || 0} available`,
               color: 'warning'
             }
           ]
@@ -185,7 +403,7 @@ const Dashboard = ({ user }) => {
               title: 'Applications Review', 
               description: 'Review and process student applications', 
               link: '/institution/applications',
-              stats: `${stats.newApplications || 0} new`,
+              stats: `${stats.pendingReviews || 0} pending`,
               color: 'info'
             },
             { 
@@ -224,7 +442,7 @@ const Dashboard = ({ user }) => {
               title: 'Candidate Pipeline', 
               description: 'View and manage qualified applicants', 
               link: '/candidates',
-              stats: `${stats.newApplicants || 0} new`,
+              stats: `${stats.newApplicants || 0} applicants`,
               color: 'info'
             },
             { 
@@ -240,7 +458,7 @@ const Dashboard = ({ user }) => {
               title: 'Interview Management', 
               description: 'Schedule and conduct candidate interviews', 
               link: '/interviews',
-              stats: `${stats.interviews || 0} scheduled`,
+              stats: `${stats.openPositions || 0} positions`,
               color: 'warning'
             }
           ]
@@ -306,6 +524,8 @@ const Dashboard = ({ user }) => {
         return 'fas fa-clock text-warning';
       case 'completed':
       case 'success':
+      case 'accepted':
+      case 'active':
         return 'fas fa-check-circle text-success';
       case 'warning':
       case 'alert':
@@ -313,10 +533,28 @@ const Dashboard = ({ user }) => {
       case 'new':
       case 'unread':
         return 'fas fa-circle text-primary';
+      case 'cancelled':
+      case 'rejected':
+        return 'fas fa-times-circle text-danger';
       default:
         return 'fas fa-info-circle text-info';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="dashboard">
+        <div className="container-fluid">
+          <div className="loading-section">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+            <p>Loading your dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard">
@@ -384,25 +622,27 @@ const Dashboard = ({ user }) => {
         </div>
 
         {/* Recent Activity */}
-        <div className="recent-activity">
-          <div className="activity-header">
-            <h3>Recent Activity</h3>
-            <button className="btn btn-link">View All</button>
-          </div>
-          <div className="activity-list">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="activity-item">
-                <div className="activity-icon">
-                  <i className={getStatusIcon(activity.status)}></i>
+        {recentActivity.length > 0 && (
+          <div className="recent-activity">
+            <div className="activity-header">
+              <h3>Recent Activity</h3>
+              <button className="btn btn-link">View All</button>
+            </div>
+            <div className="activity-list">
+              {recentActivity.map((activity, index) => (
+                <div key={activity.id || index} className="activity-item">
+                  <div className="activity-icon">
+                    <i className={getStatusIcon(activity.status)}></i>
+                  </div>
+                  <div className="activity-content">
+                    <p className="activity-message">{activity.message}</p>
+                    <span className="activity-time">{activity.time}</span>
+                  </div>
                 </div>
-                <div className="activity-content">
-                  <p className="activity-message">{activity.message}</p>
-                  <span className="activity-time">{activity.time}</span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
